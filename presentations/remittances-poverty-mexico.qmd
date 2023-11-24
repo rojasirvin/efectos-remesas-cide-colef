@@ -1,0 +1,1344 @@
+---
+title: "The Impact of Remittances on Poverty in Mexico"
+subtitle: "Evidence from the Pandemic Employment Shocks"
+author: "Francisco Cabrera & Irvin Rojas"
+institute: "CIDE"
+format:
+  revealjs:
+    width: 1500
+output-dir: docs
+---
+
+```{r setup}
+#| echo: false
+#| warning: false 
+#| message: false
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE)
+library(tidyverse)
+library(janitor)
+library(sandwich)
+library(clubSandwich)
+library(stargazer)
+library(AER)
+library(haven)
+library(lfe)
+library(fixest)
+library(leaflet)
+library(srvyr)
+
+df <- read_dta("../data/prelim_112023.dta")
+```
+
+```{r first-stage}
+#| cache: true
+pe0 <- feols(dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+pe1 <- feols(dummy_remesas ~ ss_mx_de + pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state),
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+
+#Use alternative shock
+pe0.a <- feols(dummy_remesas ~ ss_raw_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+pe1.a <- feols(dummy_remesas ~ ss_raw_de + pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state),
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+
+
+
+```
+
+
+
+
+
+```{r first-stage-interacted}
+#| cache: true
+
+im <- read_csv("../data/iim_base2020m.csv",
+               locale = locale(encoding = "latin1")) %>% 
+  clean_names() %>% 
+  rename(iim = iim_dp2,
+         iim_cat = gim_dp2,
+         iim_rank = lugar)
+
+
+df <- df %>% 
+  left_join(im, by=c("mx_mun"="cve_geo"))
+
+pe0.int <- feols(dummy_remesas ~ ss_mx_de*iim_cat,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+pe1.int <- feols(dummy_remesas ~ ss_mx_de*iim_cat + pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state),
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+
+
+
+
+pe0.rem.int <- feols(remesas ~ ss_mx_de*iim_cat,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+pe1.rem.int <- feols(remesas ~ ss_mx_de*iim_cat + pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state),
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+```
+
+
+
+```{r iv-poverty}
+#| cache: true
+iv1 <- feols(pobreza ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r iv-expenditures}
+#| cache: true
+iv.educ <- feols(educacion ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.salud <- feols(salud ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.medic <- feols(medicinas ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.vivi <- feols(vivienda ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.alim <- feols(alimentos ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.vest <- feols(vesti_calz ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.espa <- feols(esparci ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.tarj <- feols(pagotarjet ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.deud <- feols(deudas ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+
+```
+
+
+
+
+```{r iv-expenditures-pc}
+#| cache: true
+iv.educ.pc <- feols(educacion_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.salud.pc <- feols(salud_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.medic.pc <- feols(medicinas_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.vivi.pc <- feols(vivienda_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.alim.pc <- feols(alimentos_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.vest.pc <- feols(vesti_calz_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.espa.pc <- feols(esparci_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.tarj.pc <- feols(pagotarjet_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+iv.deud.pc <- feols(deudas_pc ~ pop2020 + edad_jefe + I(edad_jefe^2) + tot_integ  + prop_11menos + prop_65mas + prop_mujeres |
+               factor(rural) + factor(educa_jefe) + factor(mx_state) |
+               dummy_remesas ~ ss_mx_de,
+             weights = filter(df, noshock_info==0)$factor,
+             vcov = 'HC1',
+             data = filter(df, noshock_info==0))
+
+```
+
+
+```{r descriptive-us}
+usdata <- read_dta("../data/base_mexican_general.dta")
+
+usdata <- usdata %>% 
+  mutate(us_state_name = case_when(state ==1 ~ "Alabama",
+                                  state ==2 ~ "Alaska",
+                                  state ==3 ~ "Arizona",
+                                  state ==4 ~ "Arkansas",
+                                  state ==5 ~ "California",
+                                  state ==6 ~ "Colorado",
+                                  state ==7 ~ "Connecticut",
+                                  state ==8 ~ "Delaware",
+                                  state ==9 ~ "District of Columbia",
+                                  state ==10 ~ "Florida",
+                                  state ==11 ~ "Georgia",
+                                  state ==12 ~ "Hawaii",
+                                  state ==13 ~ "Idaho",
+                                  state ==14 ~ "Illinois",
+                                  state ==15 ~ "Indiana",
+                                  state ==16 ~ "Iowa",
+                                  state ==17 ~ "Kansas",
+                                  state ==18 ~ "Kentucky",
+                                  state ==19 ~ "Louisiana",
+                                  state ==20 ~ "Maine",
+                                  state ==21 ~ "Maryland",
+                                  state ==22 ~ "Massachusetts",
+                                  state ==23 ~ "Michigan",
+                                  state ==24 ~ "Minnesota",
+                                  state ==25 ~ "Mississippi",
+                                  state ==26 ~ "Missouri",
+                                  state ==27 ~ "Montana",
+                                  state ==28 ~ "Nebraska",
+                                  state ==29 ~ "Nevada",
+                                  state ==30 ~ "New Hampshire",
+                                  state ==31 ~ "New Jersey",
+                                  state ==32 ~ "New Mexico",
+                                  state ==33 ~ "New York",
+                                  state ==34 ~ "North Carolina",
+                                  state ==35 ~ "North Dakota",
+                                  state ==36 ~ "Ohio",
+                                  state ==37 ~ "Oklahoma",
+                                  state ==38 ~ "Oregon",
+                                  state ==39 ~ "Pennsylvania",
+                                  state ==40 ~ "Rhode Island",
+                                  state ==41 ~ "South Carolina",
+                                  state ==42 ~ "South Dakota",
+                                  state ==43 ~ "Tennessee",
+                                  state ==44 ~ "Texas",
+                                  state ==45 ~ "Utah",
+                                  state ==46 ~ "Vermont",
+                                  state ==47 ~ "Virginia",
+                                  state ==48 ~ "Washington",
+                                  state ==49 ~ "West Virginia",
+                                  state ==50 ~ "Wisconsin",
+                                  state ==51 ~ "Wyoming")) %>% 
+   mutate(ind_name = case_when(ind==11 ~ "Agriculture Forestry Fishing Hunting",
+                                ind==21 ~ "Mining Quarrying",
+                                ind==22 ~ "Utilities",
+                                ind==23 ~ "Construction",
+                                ind==31 ~ "Manufacturing",
+                                ind==42 ~ "Wholesale Trade",
+                                ind==44 ~ "Retail Trade",
+                                ind==48 ~ "Transportation and Warehousing",
+                                ind==51 ~ "Information",
+                                ind==52 ~ "Finance and Insurance",
+                                ind==53 ~ "Real Estate and Rental and Leasing",
+                                ind==54 ~ "Profesional Scientific and Technical Services",
+                                ind==55 ~ "Management of companies and enterprises",
+                                ind==56 ~ "Adminin and support and waste mgmt services",
+                                ind==61 ~ "Educational Services",
+                                ind==62 ~ "Health Care and Social Care",
+                                ind==71 ~ "Arts Entertainment and Recreation",
+                                ind==72 ~ "Accomodation and Food Services",
+                                ind==81 ~ "Other Services, excl. Public Admon")) %>% 
+  mutate(ind_name_spanish = case_when(ind==11 ~ "Agricultura",
+                                      ind==21 ~ "Minería",
+                                      ind==22 ~ "Servicios públicos",
+                                      ind==23 ~ "Construcción",
+                                      ind==31 ~ "Manufactura",
+                                      ind==42 ~ "Comercio mayoreo",
+                                      ind==44 ~ "Comercio menudeo",
+                                      ind==48 ~ "Transporte",
+                                      ind==51 ~ "Información",
+                                      ind==52 ~ "Finanzas",
+                                      ind==53 ~ "Bienes raíces",
+                                      ind==54 ~ "Servicios personales",
+                                      ind==55 ~ "Servicios admin.",
+                                      ind==56 ~ "Recursos humanos",
+                                      ind==61 ~ "Educación",
+                                      ind==62 ~ "Salud",
+                                      ind==71 ~ "Recreación",
+                                      ind==72 ~ "Hospitalidad",
+                                      ind==81 ~ "Otros servicios")) %>% 
+  mutate(us_state_ab = case_when(state ==1 ~ "AL",
+                                state ==2 ~ "AK",
+                                state ==3 ~ "AZ",
+                                state ==4 ~ "AR",
+                                state ==5 ~ "CA",
+                                state ==6 ~ "CO",
+                                state ==7 ~ "CT",
+                                state ==8 ~ "DE",
+                                state ==9 ~ "DC",
+                                state ==10 ~ "FL",
+                                state ==11 ~ "GA",
+                                state ==12 ~ "HI",
+                                state ==13 ~ "ID",
+                                state ==14 ~ "IL",
+                                state ==15 ~ "IN",
+                                state ==16 ~ "IA",
+                                state ==17 ~ "KS",
+                                state ==18 ~ "KY",
+                                state ==19 ~ "LA",
+                                state ==20 ~ "ME",
+                                state ==21 ~ "MD",
+                                state ==22 ~ "MA",
+                                state ==23 ~ "MI",
+                                state ==24 ~ "MN",
+                                state ==25 ~ "MS",
+                                state ==26 ~ "MO",
+                                state ==27 ~ "MT",
+                                state ==28 ~ "NE",
+                                state ==29 ~ "NV",
+                                state ==30 ~ "NH",
+                                state ==31 ~ "NJ",
+                                state ==32 ~ "NM",
+                                state ==33 ~ "NY",
+                                state ==34 ~ "NC",
+                                state ==35 ~ "ND",
+                                state ==36 ~ "OH",
+                                state ==37 ~ "OK",
+                                state ==38 ~ "OR",
+                                state ==39 ~ "PA",
+                                state ==40 ~ "RI",
+                                state ==41 ~ "SC",
+                                state ==42 ~ "SD",
+                                state ==43 ~ "TN",
+                                state ==44 ~ "TX",
+                                state ==45 ~ "UT",
+                                state ==46 ~ "VT",
+                                state ==47 ~ "VA",
+                                state ==48 ~ "WA",
+                                state ==49 ~ "WV",
+                                state ==50 ~ "WI",
+                                state ==51 ~ "WY")) %>% 
+  filter(year>=2019) %>% 
+  arrange(state, ind, year) %>% 
+  group_by(state, ind) %>% 
+  mutate(delta_emp = (workers-lag(workers))*100/lag(workers)) %>% 
+  ungroup()
+  
+
+
+
+
+
+
+#Shocks differ across industries and states
+#5: California, 33: New York, 42: South Dakota, 44: Texas
+delta.emp.ind <- usdata %>%
+  mutate(ind_name_spanish = fct_reorder(ind_name_spanish, ind)) %>%
+  filter(state%in% c(5, 33, 42, 44) & year==2020) %>% 
+  ggplot(aes(x=factor(ind_name_spanish),
+             y=delta_emp)) +
+  geom_col() +
+  xlab("Sector") +
+  ylab("Cambio  en el empleo (%)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=5)) +
+  facet_wrap(~us_state_name,
+             ncol=2) 
+
+
+
+#Shocks differ for a given industry across states
+delta.emp.ind2 <- usdata %>% 
+  filter(ind_name_spanish %in% c("Agricultura",
+                         "Construcción",
+                         "Manufactura",
+                         "Hospitalidad") & year==2020) %>% 
+  ggplot(aes(x=factor(us_state_ab),
+             y=delta_emp)) +
+  geom_col()+
+  xlab("Estado") +
+  ylab("Cambio  en el empleo (%)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=5)) +
+  facet_wrap(~ind_name_spanish,
+             ncol=2)
+
+
+
+
+
+
+
+
+#Map of state-level changes in employment
+delta.emp.state <- usdata %>% 
+  group_by(state, us_state_name, year) %>% 
+  summarise(workers = sum(workers, na.rm = T)) %>% 
+  mutate(delta_emp_state = (workers-lag(workers))*100/lag(workers)) %>% 
+  filter(year==2020) %>% 
+  ungroup() 
+
+delta.emp.state <- delta.emp.state %>% 
+  mutate(delta_emp_cat = cut(delta_emp_state,
+                             breaks = c(-Inf,-6,-4,-2,0,Inf),
+                             right=T))
+
+us.states.map <- geojsonio::geojson_read("https://rstudio.github.io/leaflet/json/us-states.geojson",
+                                         what = "sp") 
+
+a <- us.states.map@data
+
+us.states.map@data <- us.states.map@data %>% 
+  left_join(delta.emp.state,
+            by=c("name"="us_state_name"))
+
+b <- us.states.map@data
+
+pal <- colorFactor(c('#cb181d','#fb6a4a','#fcae91','#fee5d9',"green4"),
+                   domain = delta.emp.state$delta_emp_cat)
+
+
+labels <- paste(
+  "<strong>Estado: ", us.states.map$name,
+  "<strong><br>Cambio en empleo: ", round(us.states.map$delta_emp_state,1)) %>%
+  lapply(htmltools::HTML)
+
+
+
+us.delta.emp.map <- leaflet(us.states.map) %>%
+    addTiles() %>%
+  addProviderTiles(providers$OpenStreetMap) %>%
+  addPolygons(fillColor = ~pal(delta_emp_cat),
+              weight = 2,
+              opacity = 1,
+              color = "white",
+              dashArray = "3",
+              fillOpacity = 0.7,
+              label = labels) %>% 
+  addLegend("bottomright",
+            pal = pal,
+            values = ~delta.emp.state$delta_emp_cat,
+            title = "Cambio en el empleo",
+            opacity = 1)
+
+
+  
+  
+  
+  
+  
+  
+
+
+
+#Share of Mexicans
+usdata <- usdata %>% 
+  mutate(mexicans_share=mexwt*100/workers)
+
+
+
+#Share of Mexicans in each industry for selected states
+#5: California, 33: New York, 42: South Dakota, 44: Texas
+mexicans.ind <- usdata %>% 
+  mutate(ind_name_spanish = fct_reorder(ind_name_spanish, ind)) %>%
+  filter(state%in% c(5, 33, 42, 44) & year==2020) %>% 
+  ggplot(aes(x=factor(ind_name_spanish),
+             y=mexicans_share)) +
+  geom_col() + 
+  xlab("Sector") +
+  ylab("Trabajadores mexicanos (%)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=5)) +
+  facet_wrap(~us_state_name,
+             ncol=2)
+
+
+```
+
+
+```{r descriptive-weights}
+wdf <- read_csv("../data/trips_mun_to_state_pm_plus10trips.csv") %>% 
+    filter(us_state != "No Response" & us_state!="Not Know" & us_state!="Not Specific State" & us_state!="Not Specified") %>% 
+  group_by(mx_mun) %>% 
+  mutate(trips_total=sum(trips, na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(trips_share = trips*100/trips_total) 
+
+im <- read_csv("../data/iim_base2020m.csv",
+               locale = locale(encoding = "latin1")) %>% 
+  clean_names() %>% 
+  rename(iim = iim_dp2,
+         iim_cat = gim_dp2,
+         iim_rank = lugar)
+
+
+wdf <- wdf %>% 
+  left_join(im, by=c("mx_mun"="cve_geo"))
+
+
+
+#For selected municipalities, the destinations mix varies
+#11014: Dolores Hidalgo, Guanajuato
+#32040: Sain Alto, Zacatecas
+#15123: Luvianos, Estado de México
+#14058: Mascota, Jalisco
+
+
+shares.mun <- wdf %>% 
+  filter(mx_mun %in% c(11014, 32040, 15105, 14058)) %>% 
+  ggplot(aes(x = us_state,
+             y = trips_share))+
+  geom_col() +
+  xlab("Estado de EUA") +
+  ylab("Peso (%)") +
+  facet_wrap(~nom_mun,
+             ncol=2,
+             scales = 'free')
+
+
+
+
+
+#Main destinations are well captured
+
+prop.dest.states <- wdf %>% 
+  group_by(us_state) %>% 
+  summarize(total_trips_state = sum(trips)) %>% 
+  ungroup() %>% 
+  mutate(trips_share_state = total_trips_state*100/sum(total_trips_state)) %>% 
+  arrange(-trips_share_state) %>% 
+  head(n=10)
+
+
+
+dest.states.trips <- prop.dest.states %>% 
+  ggplot(aes(y=trips_share_state,
+             x=us_state)) +
+  geom_col() +
+  xlab("Estado de destino") +
+  ylab("Viajes en la EMIF (%)")
+
+
+
+
+
+
+#Map of instrument
+
+map.iv <- df %>% 
+  mutate(mx_mun2 = str_pad(mx_mun, width = 5, pad = 0),
+         mun = as.numeric(substr(mx_mun2, 3, 5))) %>% 
+  distinct(mx_mun, mx_mun_name, mx_state_name, ent, mun, ss_mx_de, ss_raw_de) 
+
+
+mx.mun.map <- geojsonio::geojson_read("../data/municipalities.geojson",
+                                         what = "sp") 
+
+
+mx.mun.map@data <- mx.mun.map@data %>% 
+  left_join(map.iv,
+            by=c("state_code"="ent",
+                 "mun_code"="mun")) %>% 
+  left_join(im,
+            by=c("mx_mun"="cve_geo"))
+
+#Instrument without Mexicans weight  
+pal <- colorNumeric("Greens",
+                   domain = map.iv$ss_raw_de,
+                   reverse = TRUE)
+
+labels <- paste(
+  "<strong>Estado: ", mx.mun.map$mx_state_name,
+  "<strong><br>Mun.: ", mx.mun.map$mx_mun_name,
+  "<strong><br>Hogares con remesas (%): ", round(mx.mun.map$viv_rem,1),
+  "<strong><br>IIM: ", round(mx.mun.map$iim,1),
+  "<strong><br>IIM (cat.): ", mx.mun.map$iim_cat,1,
+  "<strong><br>Shift-share: ", mx.mun.map$ss_raw_de,1) %>%
+  lapply(htmltools::HTML)
+
+
+ss_raw_de.map <-  leaflet(mx.mun.map) %>%
+  addProviderTiles(providers$OpenStreetMap) %>%
+  addPolygons(fillColor = ~pal(ss_raw_de),
+              weight = 2,
+              opacity = 1,
+              color = "white",
+              dashArray = "3",
+              fillOpacity = 0.7,
+              label = labels) %>% 
+    addLegend("bottomright",
+            pal = pal,
+            values = ~map.iv$ss_raw_de,
+    title = "Shift-share",
+    opacity = 1)
+
+
+
+
+
+
+
+
+#Instrument weighting for Mexicans
+pal <- colorNumeric("inferno",
+                   domain = map.iv$ss_mx_de,
+                   reverse = T)
+
+
+labels <- paste(
+  "<strong>Estado: ", mx.mun.map$mx_state_name,
+  "<strong><br>Mun.: ", mx.mun.map$mx_mun_name,
+  "<strong><br>Hogares con remesas (%): ", round(mx.mun.map$viv_rem,1),
+  "<strong><br>IIM: ", round(mx.mun.map$iim,1),
+  "<strong><br>IIM (cat.): ", mx.mun.map$iim_cat,1,
+  "<strong><br>Shift-share: ", mx.mun.map$ss_mx_de,1) %>%
+  lapply(htmltools::HTML)
+
+
+ss_mx_de.map <- leaflet(mx.mun.map) %>%
+    addProviderTiles(providers$OpenStreetMap) %>%
+  addPolygons(fillColor = ~pal(ss_mx_de),
+              weight = 2,
+              opacity = 1,
+              color = "white",
+              dashArray = "3",
+              fillOpacity = 0.7,
+              label = labels) %>% 
+  addLegend("bottomright",
+            pal = pal,
+            values = ~map.iv$ss_mx_de,
+            title = "Shift-share",
+            opacity = 1)
+
+```
+
+
+```{r descriptive-matriculas}
+mat.df <- read_csv("../data/matriculas_mun_to_state_pm.csv")
+
+wdf <- wdf %>% 
+  left_join(mat.df, by=c("mx_mun"="mx_mun", "us_state"="us_edo_nombre")) %>% 
+  group_by(mx_mun) %>% 
+  mutate(matriculas_total=sum(matriculas)) %>% 
+  ungroup() %>% 
+  mutate(matriculas_share=matriculas*100/matriculas_total)
+
+mat.trips.comp <- wdf %>% 
+  select(mx_mun, nom_mun, us_state, trips_share, matriculas_share) %>% 
+  pivot_longer(cols =  c(trips_share, matriculas_share))
+
+
+
+
+
+
+
+#Compare total shares to states with EMIF
+
+prop.dest.states.mat <- mat.df %>% 
+  group_by(us_edo_nombre) %>% 
+  summarize(total_matriculas_state = sum(matriculas)) %>% 
+  ungroup() %>% 
+  mutate(matriculas_share_state = total_matriculas_state*100/sum(total_matriculas_state)) %>% 
+  arrange(-total_matriculas_state) 
+
+
+prop.dest.states.comp <- prop.dest.states %>% 
+  left_join(prop.dest.states.mat, by=c("us_state"="us_edo_nombre")) %>% 
+  pivot_longer(cols = -us_state,
+               names_to = "source",
+               values_to = "percentage")
+
+
+comp.trips.matriculas <- prop.dest.states.comp %>% 
+  filter(source=="trips_share_state" | source=="matriculas_share_state") %>% 
+    ggplot(aes(x = us_state,
+               y = percentage,
+               fill = source))+
+    geom_col(position = "dodge") +
+    scale_fill_discrete(name="Fuente:",
+                        labels=c('Matrículas', 'EMIF'))+
+  xlab("Estado de EUA") +
+  ylab("Participación (%)") 
+  
+
+  
+
+
+#Compare weights assigned in a given municipality
+shares.compar <- mat.trips.comp %>% 
+  filter(mx_mun %in% c(11014, 32040, 15105, 16069)) %>% 
+  ggplot(aes(x = us_state,
+             y = value,
+             fill = name))+
+  geom_col(position = "dodge") +
+  scale_fill_discrete(name="Fuente:",
+                        labels=c('Matrículas', 'EMIF'))+
+  xlab("Estado de EUA") +
+  ylab("Peso (%)") +
+  facet_wrap(~nom_mun,
+             ncol=2,
+             scales = 'free')
+
+
+
+``` 
+
+
+
+```{r descriptive-remittances}
+df.w <- df %>%
+   as_survey_design(weights = factor)
+
+
+#Proportion of all households with remittances
+rem.share <- as.numeric(df.w %>% 
+  summarise(prop_remittances = mean(dummy_remesas, na.rm=T)*100))
+
+
+rem.share.state <- df.w %>% 
+  group_by(mx_state, mx_state_name) %>% 
+  summarise(prop_remittances = mean(dummy_remesas, na.rm=T)*100) %>% 
+  ungroup()
+  
+#Share of households with remittances
+mx.state.map <- geojsonio::geojson_read("../data/states.geojson",
+                                         what = "sp") 
+
+
+mx.state.map@data <- mx.state.map@data %>% 
+  left_join(rem.share.state, by=c("state_code"="mx_state"))
+
+
+pal <- colorNumeric("OrRd",
+                   domain = rem.share.state$prop_remittances)
+
+
+labels <- paste(
+  "<strong>Estado: ", mx.state.map$mx_state_name,
+  "<strong><br>Hogares con remesas (%): ", round(mx.state.map$prop_remittances,1)) %>%
+  lapply(htmltools::HTML)
+
+prop_remittances.map <- leaflet(mx.state.map) %>%
+      addProviderTiles(providers$OpenStreetMap) %>%
+  addPolygons(fillColor = ~pal(prop_remittances),
+              weight = 2,
+              opacity = 1,
+              color = "white",
+              dashArray = "3",
+              label = labels,
+              fillOpacity = 0.7) %>% 
+  addLegend("bottomright",
+            pal = pal,
+            values = ~rem.share.state$prop_remittances,
+            title = "Hogares con remesas (%)",
+            opacity = 1)
+
+
+
+#Share of remittances in total income
+prop.hogares.ingreso <- df.w %>% 
+  filter(dummy_remesas==1) %>% 
+  mutate(prop_remesas_ing = remesas / ing_cor) %>% 
+  summarise(prop_remesas_ing = mean(prop_remesas_ing, na.rm=T))
+
+
+remittances.share.ing_cor <- df.w %>% 
+  mutate(prop_remesas_ing = remesas / ing_cor) %>% 
+  group_by(mx_state, mx_state_name, dummy_remesas) %>% 
+  summarise(prop_remesas_ing = mean(prop_remesas_ing, na.rm=T))
+
+
+
+#Cross-tap of dummy_remesas and poverty
+
+df.w <- df.w %>% 
+  mutate(ing_cor_decil = ntile(ing_cor, n=10))
+
+
+prop.hogares.remit <- df.w %>% 
+  group_by(ing_cor_decil) %>% 
+  summarise(dummy_remesas = mean(dummy_remesas, na.rm=T))
+  
+prop.hogares.remit.decil <- df.w %>% 
+  group_by(dummy_remesas) %>% 
+  summarise(pobreza = mean(pobreza, na.rm=T))
+  
+
+```
+
+
+```{r descriptive-means-expenditure}
+exp.dummy_remesas.0 <- df.w %>% 
+  filter(noshock_info==0 & dummy_remesas==0) %>% 
+  summarise(educacion = mean(educacion, na.rm=T),
+            salud = mean(salud, na.rm=T),
+            medicinas= mean(medicinas, na.rm=T),
+            vivienda= mean(vivienda, na.rm=T),
+            alimentos= mean(alimentos, na.rm=T),
+            vesti_calz= mean(vesti_calz, na.rm=T),
+            pagotarjet= mean(pagotarjet, na.rm=T),
+            deudas= mean(deudas, na.rm=T))
+
+exp.pc.dummy_remesas.0 <- df.w %>% 
+  filter(noshock_info==0 & dummy_remesas==0) %>% 
+  summarise(educacion_pc = mean(educacion_pc, na.rm=T),
+            salud_pc = mean(salud_pc, na.rm=T),
+            medicinas_pc= mean(medicinas_pc, na.rm=T),
+            vivienda_pc= mean(vivienda_pc, na.rm=T),
+            alimentos_pc= mean(alimentos_pc, na.rm=T),
+            vesti_calz_pc= mean(vesti_calz, na.rm=T),
+            pagotarjet_pc= mean(pagotarjet_pc, na.rm=T),
+            deudas_pc= mean(deudas_pc, na.rm=T))
+```
+
+
+# Motivación
+  
+## Importancia de las remesas en México
+
+
+
+:::: {.columns}
+
+::: {.column width="40%"}
+- Crecimiento de las remesas en México en años recientes
+
+- Solo 5.9% de los hogares mexicanos reciben remesas
+
+- Para los hogares que reciben remesas, estas representan en promedio el 24% de su ingreso corriente total
+
+- Se tiende a sobreestimar el impacto de las remesas en la pobreza
+
+:::
+
+::: {.column width="60%"}
+![Remesas familiares a México (millones USD)](remesas-bbva.jpg){fig-align="right" width=100%}
+:::
+
+::::
+
+
+
+## Atención mediática
+
+:::: {.columns}
+
+::: {.column width="40%"}
+- Hay juicios fuertes sobre la migración y las remesas
+
+- Discurso oficial de políticas para frenar la migración
+
+- Reconocimiento del papel de las remesas para la economía de los hogares (y las localidades)
+:::
+
+::: {.column width="60%"}
+![](amlo-remesas-mananera.jpeg){fig-align="right"}
+:::
+
+::::
+
+
+
+
+
+## Marco conceptual
+
+- No es posible determinar teóricamente el impacto de la migración y las remesas para la economía del hogar
+
+- La migración puede ser positiva bajo un modelo à la Harris y Todaro (1970)
+
+- La migración puede ser negativa si los hogares pierden a sus miembros más productivos
+
+- La nueva economía de la migración laboral (Stark & Bloom, 1985) coloca a la migración en el contexto de hogares duales que enfrentan fallas de mercado
+
+- Relación a estimar: remesas $\rightarrow$ pobreza
+
+  - Simultaneidad
+  - Doble causalidad
+  - Sesgo de selección
+
+## Preguntas de investigación
+
+- ¿Cuál es el impacto de las remesas sobre la probabilidad de que un hogar se encuentre en pobreza?
+
+- ¿Cuáles son los canales por los cuales los hogares que reciben remesas mejoran sus condiciones económicas?
+
+## Literatura relacionada
+
+- Estudios de sección cruzada o paneles de países
+  - Datos agregados a nivel país relacionando remesas per cápita con pobreza
+  - Adams & Page (2005) estiman una elasticidad de la pobreza de 0.2
+  - Acosta et al.(2007) estiman dicha elasticidad entre 0.04 y 0.5
+
+- Estudios microeconométricos
+  - Modelación explícita de la selección
+  - Variables instrumentales
+
+- Enfoque de evaluación
+  - Estrategias de matching
+  - Loterías para bajar los costos de migrar
+  
+
+## Identificación por VI
+
+- Mesnard & Ravallion (2005): cambios en política de detención $\rightarrow$ ahorro
+
+- Jang (2008): choques de tasa de interés en países asiáticos $\rightarrow$ finanzas del hogar
+
+- Cuadros-Menaca (2020) y Cuadros-Menaca & Gaduh (2020): choques de empleo $\rightarrow$ remesas $\rightarrow$ trabajo infantil, pensiones
+  
+- Azizi (2021): remesas $\rightarrow$ pobreza, desigualdad
+
+- Woodruff & Zenteno (2007): patrones históricos de migración $\rightarrow$ migración, remesas
+
+- Regmi & Paudel (2017): intensidad de la red de migración $\rightarrow$ remesas $\rightarrow$ seguridad alimentaria
+
+
+
+# Metodología
+
+## Ecuación estructural
+
+- La relación a estimar es:
+
+
+$$y_{im}=\alpha + \beta R_{im} + \sum_j x_{ij}'\gamma_j + \varepsilon_{im}$$
+
+- $y_{im}$ es un indicador de si el hogar $i$ se encuentra en pobreza o del gasto en distintas categorías
+
+- Problema de endogeneidad del indicador $R_{im}$
+
+- Empleamos una variable instrumental para $R_{im}$
+
+
+## Instrumentos *shift-share*
+
+- El instrumento es una medida de la exposición del hogar $i$ a choques económicos no correlacionados directamente con el ingreso del hogar, salvo a través del envío de remesas
+
+- Para cada municipio calculamos:
+
+$$
+\begin{aligned}
+z_{m}&= \left(\sum_{s} \frac{M_{ms}}{M_{m}}\right) \left(\sum_k p_{ks}\Delta E_{ks}\right) = share_m \times shift_{s}
+\end{aligned}
+$$
+
+- Literatura reciente (Borusyak, Hull & Jaravel, 2020; Goldsmith-Pinkham & Sorkin, 2020) han formalizado el análisis *shift-share* enfatizando la exogeneidad de alguno de los componentes
+
+## Instrumentos *shift-share*
+
+$$
+\begin{aligned}
+z_{m}&= \left(\sum_{s} \frac{M_{ms}}{M_{m}}\right) \left(\sum_k p_{ks}\Delta E_{ks}\right) 
+\end{aligned}
+$$
+
+- $M_{ms}$ es el número de migrantes desde el municipio mexicano $m$ hacia el estado estadounidense $s$ entre 2012 y 2020
+
+- $M_m$ número de migrantes desde el municipio $m$ hacia los Estados Unidos
+
+- $\Delta E_{ks}$ es el cambio en el empleo en el sector económico $k$ del estado $s$ entre junio de 2019 y junio de 2020
+
+- $p_{ks}$ es la proporción de mexicanos que trabajan en el sector $k$ del estado $s$
+
+- Una versión alternativa de $z_m$ define los *shifts* simplemente como $shift_s=\sum_k\Delta E_{ks}$
+
+
+
+## Identificación
+
+- Los choques de empleo en los estados de destino afectan los ingresos de los migrantes, que a su vez afectan las remesas que los hogares reciben en los municipios de origen
+
+- Los choques no afectan directamente los ingresos de los hogares en México, excepto por su impacto en las remesas recibidas
+
+- Los choques de empleo fueron no previstos por los hogares en México y/o estos no pudieron hacer nada para estratégicamente relocalizarse en otros estados
+
+
+# Datos
+
+## *Shifts*
+
+- Usamos el U.S. Census and American Community Survey para obtener el número de trabajadores por sector $k$^[Los sectores usados en el análisis son: Agricultura, Minería, Servicios públicos, Construcción, Manufactura, Comercio mayoreo, Comercio menudeo, Transporte, Información, Finanzas, Bienes raíces, Servicios personales, Servicios admin., Recursos humanos, Educación,Salud, Recreación, Hospitalidad, y Otros servicios] y por estado $s$ en los Estados Unidos
+
+- Estos datos también permiten conocer la proporción de mexicanos en cada sector y estado
+
+- Usamos pesos muestrales
+
+
+## Cambios en empleo en EUA
+
+
+:::: {.columns}
+
+::: {.column width="40%"}
+- Choques diferenciados en los niveles de empleo entre estados en EUA
+
+- Los estados destino más importantes para mexicanos tuvieron caidas de empleo distintas
+:::
+
+::: {.column width="60%"}
+```{r}
+us.delta.emp.map
+```
+:::
+
+::::
+
+
+
+## Variación entre industrias para un estado dado
+
+```{r}
+#| fig-height: 4
+#| fig-dpi: 600
+#| fig-align: center
+delta.emp.ind
+```
+
+
+## Variación entre estados para una industria dada
+
+```{r}
+#| fig-height: 4
+#| fig-dpi: 600
+#| fig-align: center
+delta.emp.ind2
+```
+
+## Variación en la participación de mexicanos por industria
+```{r}
+#| fig-height: 4
+#| fig-dpi: 600
+#| fig-align: center
+mexicans.ind
+```
+
+## *Shares*
+
+- Usamos la Encuesta sobre Migración en la Frontera Norte de México (COLEF)
+
+- La encuesta captura flujos en puntos seleccionados de la frontera norte
+
+- Usamos todos los viajes registrados de 2012 a 2020 de personas que declaran dirigirse a Estados Unidos por trabajo
+
+- Se registra el municipio de origen y el estado de destino
+
+- Usamos pesos muestrales
+
+## Destinos de migración
+
+```{r}
+#| fig-height: 4
+#| fig-dpi: 600
+#| fig-align: center
+dest.states.trips
+```
+
+
+## Pesos varían a nivel municipal
+
+```{r}
+#| fig-height: 4
+#| fig-dpi: 600
+#| fig-align: center
+shares.mun
+```
+
+
+## *Shift-share* 
+
+- El instrumento representa choques diferenciados para municipios parecidos
+
+```{r}
+#| fig-height: 6
+#| fig-width: 14
+#| #| fig-align: center
+ss_mx_de.map
+```
+
+## Remesas y pobreza
+
+- Usamos los datos de la Encuesta Nacional de Ingresos y Gastos de los Hogares (2020)
+
+- Identifica los hogares que reciben remesas
+
+- Gastos en educación, salud, alimentación, entre otros
+
+- Características sociodemográficas de los hogares
+
+- Indicador de pobreza multidimensional de acuerdo con la definición del Consejo Nacional de Evaluación de la Política de Desarrollo Social (CONEVAL)
+
+
+## Remesas
+
+- A nivel nacional, el 5.9% de los hogares recibe remesas
+
+```{r}
+#| fig-height: 6
+#| fig-width: 14
+#| fig-align: center
+prop_remittances.map
+```
+
+# Resultados
+
+## Primera etapa
+
+- El *shift-share* está negativamente correlacionado con la probabilidad de recibir remesas
+
+- Estimamos la siguiente ecuación
+
+   $$R_{im}=\rho + \delta \text{shift-share}_m + \sum_j x_{ij}'\pi_j + u_{im}$$
+   
+- Nuestros resultados principales incluyen un vector de controles $x_{ij}$^[Los controles incluyen: un polinomio cuadrático de la edad del jefe del hogar, el tamaño del hogar, la proporción de personas menores de 11 años que viven en el hogar, la proporción de personas de más de 65 años que viven en el hogar, la proporción de mujeres que vive en el hogar, un indicador para hogares rurales, efectos fijos para 11 niveles de educación del jefe del hogar, la población municipal en 2020 y efectos fijos por estado.]
+
+
+
+## Primera etapa
+
+```{r}
+#| cache: true
+rows <- tribble(~A, ~B, ~C,
+                'F','421','509')
+
+
+modelsummary::modelsummary(list("Sin controles"=pe0,
+                                "Con controles"=pe1),
+                           stars =c('*' = .1, '**' = 0.05, '***' = .01),
+                           coef_map = c('ss_mx_de' = 'shift-share'),
+                           gof_map = c("nobs"),
+                           add_rows = rows)
+```
+
+
+
+## Impactos en pobreza
+
+```{r}
+#| cache: true
+modelsummary::modelsummary(list("Pobreza"=iv1),
+                           stars =c('*' = .1, '**' = 0.05, '***' = .01),
+                           coef_map = c('fit_dummy_remesas' = 'Recibe remesas'),
+                           gof_map = c("nobs"))
+
+```
+
+
+
+## Impactos en gasto per cápita
+
+```{r}
+#| cache: true
+
+rows <- tribble(~A, ~B, ~C, ~D, ~E,
+                'Gasto p.c. sin remesas','430', '332', '807', '3044')
+
+attr(rows, 'position') <- c(3)
+
+
+modelsummary::modelsummary(list("Educación"=iv.educ.pc, "Salud"= iv.salud.pc, "Vivienda" = iv.vivi.pc, "Alimentos"=iv.alim.pc),
+                           stars =c('*' = .1, '**' = 0.05, '***' = .01),
+                           coef_map = c('fit_dummy_remesas' = 'Recibe remesas'),
+                           gof_map = c("nobs"),
+                           add_rows = rows)
+
+```
+
+
+
+
+## Impactos en gasto per cápita (2)
+
+
+
+
+```{r}
+#| cache: true
+
+rows <- tribble(~A, ~B, ~C, ~D, ~E,
+                'Gasto p.c. sin remesas','62', '986', '1', '145')
+
+attr(rows, 'position') <- c(3)
+
+modelsummary::modelsummary(list("Medicinas"=iv.medic.pc, "Ropa"=iv.vest.pc, "Tarjetas"= iv.tarj.pc, "Deudas" = iv.deud.pc),
+                           stars =c('*' = .1, '**' = 0.05, '***' = .01),
+                           coef_map = c('fit_dummy_remesas' = 'Recibe remesas'),
+                           gof_map = c("nobs"))
+
+```
+
+
+
+## Impactos en gasto
+
+- Sustituyendo el indicador $R_{im}$ por el ingreso por remesas $Remesas_{im}$
+
+```{r}
+#| cache: true
+
+rows <- tribble(~A, ~B, ~C, ~D, ~E,
+                'Gasto trim. sin remesas','1900','1244','2906','11822')
+
+attr(rows, 'position') <- c(3)
+
+modelsummary::modelsummary(list("Educación"=iv.educ, "Salud"= iv.salud, "Vivienda" = iv.vivi, "Alimentos"=iv.alim),
+                           stars =c('*' = .1, '**' = 0.05, '***' = .01),
+                           coef_map = c('fit_remesas' = 'Remesas ($)'),
+                           gof_map = c("nobs"))
+
+
+
+
+```
+
+
+
+
+## Impactos en gasto (2)
+
+- Sustituyendo el indicador $R_{im}$ por el ingreso por remesas $Remesas_{im}$
+
+```{r}
+#| cache: true
+
+rows <- tribble(~A, ~B, ~C, ~D, ~E,
+                'Gasto trim. sin remesas','219','986','2','558')
+
+attr(rows, 'position') <- c(3)
+
+modelsummary::modelsummary(list("Medicinas"=iv.medic, "Ropa"=iv.vest, "Tarjetas"= iv.tarj, "Deudas" = iv.deud),
+                           stars =c('*' = .1, '**' = 0.05, '***' = .01),
+                           coef_map = c('fit_remesas' = 'Remesas ($)'),
+                           gof_map = c("nobs"))
+
+```
+
+
+## Robustez
+
+- Usamos el choque sin pesar por la proporción de mexicanos en cada industia
+
+- Usamos solo algunos años de la EMIF para construir los pesos
+
+- Usamos registros de matrículas consulares para el cálculo de los *shares*
+
+
+# Conclusión
+
+## Conclusión
+
+- Encontramos que los hogares que reciben remesas tiene una probabilidad 48 puntos menor de encontrarse en pobreza
+
+- Los hogares que reciben remesas tienen un gasto trimestral per cápita
+  - $2,091 mayor en salud
+  - $2,263 mayor en vivienda
+
+- Los hogares que  reciben remesas reducen su deuda per cápita en $573
+
+
+
+## Conclusión
+
+- Cada peso recibido por remesas 
+  - Incrementa en 75 centavos el gasto en salud
+  - Incrementa en 91 centavos el gasto en vivienda
+  - Reduce en 14 centavos la deuda
+  
+- No encontramos efectos en gasto per cápita ni en gasto total en educación, alimentos, medicinas, ni ropa
+
+  
